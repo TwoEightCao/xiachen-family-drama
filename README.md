@@ -89,6 +89,8 @@ cd xiachen-family-drama
 
 三者共用同一约定：`<skills根>/<name>/SKILL.md`，frontmatter 只需 `name` + `description`，因此**同一份文件三平台通用**。
 
+> **中文文件名说明**：本仓库含中文文件名（如 `docs/使用教程.md`），且台账字段名亦为中文。Python 3 读写无碍；Windows 上建议先执行 `git config --global core.quotepath false`，否则 `git status` 会把中文名显示为八进制转义。
+
 ---
 
 ## 快速验证
