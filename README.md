@@ -57,7 +57,7 @@ validate_episode.py 机检 → FAIL 必须修
 ### 方式一：克隆到 skills 目录（最简单）
 
 ```bash
-git clone https://github.com/<YOUR_ID>/xiachen-family-drama.git \
+git clone https://github.com/TwoEightCao/xiachen-family-drama.git \
   ~/.agents/skills/xiachen-family-drama
 ```
 
@@ -66,7 +66,7 @@ git clone https://github.com/<YOUR_ID>/xiachen-family-drama.git \
 ### 方式二：一键脚本（多平台）
 
 ```bash
-git clone https://github.com/<YOUR_ID>/xiachen-family-drama.git
+git clone https://github.com/TwoEightCao/xiachen-family-drama.git
 cd xiachen-family-drama
 ./install.sh              # 自动探测已装的 harness，建软链
 ./install.sh --copy       # 复制而非软链
