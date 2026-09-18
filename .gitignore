@@ -1,0 +1,28 @@
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- 本地创作产物（不应进仓库）---
+# 剧本项目目录、台账、生成稿
+*-F[1-8]-*/
+episodes/
+台账.md
+立项单.md
+人物圣经.md
+全剧大纲.md
+分集规划.md
+合规报告.md
+
+# --- 临时文件 ---
+*.tmp
+*.bak
+/tmp/
