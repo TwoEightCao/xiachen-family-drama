@@ -34,7 +34,8 @@ from pathlib import Path
 
 DOCS = ["立项单.md", "人物圣经.md", "全剧大纲.md", "台账.md"]
 HEAD_FIELDS = ["当前集", "总集数", "档位", "赛道", "情绪契约",
-               "单元划分", "主角", "底牌", "反派四层"]
+               "单元划分", "主角", "底牌", "反派四层",
+               "上一集断在", "本集须承接"]
 STALE_TOLERANCE = 3  # 伏笔超期容忍集数（与 references/08-ledger.md 一致）
 
 FMT_ALIAS = {"漫剧长档": "漫剧长档", "标准档": "标准档",
@@ -174,6 +175,14 @@ def check(proj: Path, rng, force=False):
                     f"P6 伏笔超期：{fid}「{content}」拟收第 {due} 集，当前已到第 {cur} 集"
                     f"（超期 >{STALE_TOLERANCE} 集）")
 
+    # P9 断章超期：承接账里状态=悬 的钩子，距埋入集已达容忍上限（与 P6 同一容忍度）
+    for r in parse_table(ledger, "承接账"):
+        if len(r) >= 6 and r[5] == "悬" and re.match(r"^\d+$", r[0] or ""):
+            if cur - int(r[0]) >= STALE_TOLERANCE:
+                errors.append(
+                    f"P9 断章超期：第 {r[0]} 集断在「{(r[2] if len(r) > 2 else '')[:20]}」，"
+                    f"标为「悬」已 {cur - int(r[0])} 集未兑现（上限 2 集）")
+
     # P3 集号连续性
     try:
         total = int(head.get("总集数", "0"))
@@ -268,6 +277,24 @@ def summary(proj, head, data, units, rng):
             if len(r) >= 1:
                 out.append(f"  · {r[0]}（确立第 {r[1] if len(r)>1 else '—'} 集）"
                            f"{'  ⚠ 已被违反' if len(r)>3 and r[3].startswith('是') else ''}")
+    # 承接账：印本批起点的叙事位置（缺这段，写手只能拿到状态快照，产出的就是 80 个孤立单元）
+    ch = parse_table(ledger, "承接账")
+    if frm:
+        out.append("-" * 62)
+        row_frm = next((r for r in ch if r and r[0] == str(frm)), None)
+        if row_frm and len(row_frm) >= 3:
+            out.append(f"本集（第 {frm} 集）须承接：{row_frm[1]}")
+            out.append(f"本集断在（留给第 {frm+1} 集）：{row_frm[2]}　← 下一批会校验")
+            out.append("  ↑ 本集开场前 15 秒必须先兑现「须承接」，再起本集的五母型钩子")
+        else:
+            out.append(f"⚠ 承接账缺第 {frm} 集行：无法重建叙事位置，"
+                       f"先按 templates/ledger.md 补登再开写")
+        pend = [r for r in ch if len(r) >= 6 and r[5] == "悬"]
+        if pend:
+            out.append(f"承接账仍有「悬」{len(pend)} 条（连续上限 2 集）：")
+            for r in pend[:6]:
+                out.append(f"  · 第 {r[0]} 集断在「{(r[2] if len(r) > 2 else '')[:24]}」"
+                           f"（兑现集 {r[4] if len(r) > 4 else '—'}）")
     rnd = parse_table(ledger, "往返回合表")
     matched = False
     if rnd and frm:
@@ -286,7 +313,7 @@ def summary(proj, head, data, units, rng):
         out.append("本批所在回合：⚠ 台账回合表中未找到覆盖本批起点的回合"
                    "——先补全台账回合表（每单元 6 回合）再开写")
     out.append("=" * 62)
-    out.append("写后必做：更新台账四类账 → 跑 validate_episode.py → 过人工自检清单")
+    out.append("写后必做：更新台账（五类账，含承接账）→ 跑 validate_episode.py + check_chaining.py → 过人工自检清单")
     return "\n".join(out)
 
 

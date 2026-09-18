@@ -39,16 +39,21 @@
 
 1. **锚点找错**：把下沉中老年题材写成「战神归来」式的爽剧。实际观众要的不是主角变强，是**公道兑现**——「我这辈子的付出，得有人认账」。
 2. **越写越漂**：AI 写到第 40 集，称谓变了、道具穿越了、伏笔烂尾了、主角性格前后不一。因为**上下文会被压缩、会话会重开**，对话记忆不可靠。
+3. **集集合格、连起来不像一部剧**：每集单看都过关，但上一集的断章下一集根本不提，几乎每集都用全新钩子开场——观众每集重新入场一次。**这是「只有集内质检、没有跨集质检」的必然结果。**
 
-本项目的对策：**把防漂移防线全部落在文件上，并且让它「不跑就报错」。**
+本项目的对策：**把防漂移防线全部落在文件上，并且让它「不跑就报错」；集内与跨集两个方向都检。**
 
 ```text
-台账（唯一事实源）＝ 伏笔账 + 人物账 + 道具账 + 规矩账
+台账（唯一事实源）＝ 伏笔账 + 人物账 + 道具账 + 规矩账 + 承接账
+                                                 ↑ 叙事位置：上一集停在哪一帧、观众在等什么
         ↓ 每批开工
-batch_preflight.py 门控 → 不通过不得开写 → 输出「上下文重建摘要」
+batch_preflight.py 门控 → 不通过不得开写 → 输出「上下文重建摘要」（含本集须承接 / 本集断在）
         ↓ 每集写完
-validate_episode.py 机检 → FAIL 必须修
+validate_episode.py  机检（集内）→ 这一集自己合不合格
+check_chaining.py    机检（跨集）→ 这一集有没有接住上一集
 ```
+
+> **一部剧 = N 个合格单元 + N−1 段有效承接。** 只查前者，得到的就是 N 个孤立的合格单元。
 
 ---
 
@@ -170,6 +175,7 @@ python3 "$SKILL/scripts/validate_episode.py" "$SKILL/examples/ep01-demo.md"
 - **单元链**：一个矛盾硬帽 **20~30 集**必须闭环（长档折半 10~15 集），60 集 = 2~3 单元，80 集 = 3 单元，100 集 = 3~4 单元。
 - **往返六档**：每回合施压升一档、反驳升一档，两档都不升 = 废回合。
 - **四层反派**：恶媳/恶婿 → 白眼狼子女（**可理解动机层**）→ 伪善亲戚乡邻 → 幕后真凶/规矩本身，换层不换欲。
+- **承接账**：前四类账记的是**状态**，第五类记的是**叙事位置**——第 N 集停在哪一帧、观众在等哪个答案。铁律是「**第 N+1 集的承接必须等于第 N 集的断在**」，钩子最多悬 2 集。
 - **三条硬规矩**：
   1. 不许把老人写成纯受害者 —— 必须带「藏着的底牌」，每 10 集至少动一次；
   2. 不许子女反派一坏到底 —— 至少一层要有可体谅的处境；
@@ -177,21 +183,27 @@ python3 "$SKILL/scripts/validate_episode.py" "$SKILL/examples/ep01-demo.md"
 
 ---
 
-## 两个脚本
+## 三个脚本
 
 ```bash
 SKILL=~/.agents/skills/xiachen-family-drama
 
-# 1) 单集机检：档位/体量/场景/对白行/台词长度/断章五字段/中段小钩/高危词/复读/开篇禁令
+# 1) 单集机检（集内）：档位/体量/场景/对白行/台词长度/断章五字段/中段小钩/高危词/复读/开篇禁令
 python3 "$SKILL/scripts/validate_episode.py" episodes/ep001.md
 python3 "$SKILL/scripts/validate_episode.py" episodes/ep001.md --format standard|long|manju|manju-long
 
-# 2) 批次开工门控：底稿/台账字段/集号连续/伏笔超期 + 上下文重建摘要
+# 2) 跨集承接机检：C1 断裂 / C2 未兑现 / C3 超期 / C4 台账 + 断章复活延迟诊断
+python3 "$SKILL/scripts/check_chaining.py" .
+python3 "$SKILL/scripts/check_chaining.py" . --csv /tmp/chaining.csv   # 逐对明细，便于人工比对
+
+# 3) 批次开工门控：底稿/台账字段/集号连续/伏笔超期/断章超期 + 上下文重建摘要
 python3 "$SKILL/scripts/batch_preflight.py" . --from 6 --to 10
 python3 "$SKILL/scripts/batch_preflight.py" . --from 23 --to 23 --force   # 返修/补拍
 ```
 
-门控的 **PASS 输出「上下文重建摘要」**是本项目最实用的一块：本批只读这一段摘要即可，不必重读四份全文 —— 这是把 80 集长剧的上下文成本压下来的关键。
+门控的 **PASS 输出「上下文重建摘要」**是本项目最实用的一块：本批只读这一段摘要即可，不必重读四份全文 —— 这是把 80 集长剧的上下文成本压下来的关键。摘要里**含本集的叙事位置**（须承接什么、断在留给下一集什么），因为写单集最需要的恰恰是这一条。
+
+`check_chaining.py` 有两种工作模式：**有承接账时**做确定性校验（声明 vs 正文）；**没有承接账时**（存量稿子）降级为启发式体检，用「道具账 + 伏笔账 + 内置词表」比对相邻集，此时计数为启发式，不等于人工判读。
 
 ---
 
@@ -199,7 +211,7 @@ python3 "$SKILL/scripts/batch_preflight.py" . --from 23 --to 23 --force   # 返�
 
 ```text
 xiachen-family-drama/
-├── SKILL.md                        主引擎：8 个交互模式 + 门控 + 8 条红线
+├── SKILL.md                        主引擎：8 个交互模式 + 门控 + 9 条红线
 ├── README.md / LICENSE / NOTICE.md / CHANGELOG.md
 ├── install.sh                      多平台幂等安装
 ├── docs/使用教程.md                 8 种出剧场景全流程教程
@@ -211,15 +223,16 @@ xiachen-family-drama/
 │   ├── 05-voice-dialogue.md        声口库 + 称谓表 + 辱骂分级 + 去 AI 味七维
 │   ├── 06-hook-cliffhanger.md      黄金前3秒五母型 + 四大断章公式
 │   ├── 07-compliance-taboo.md      平台红线 + 家庭伦理九大雷区
-│   └── 08-ledger.md                批次开工规程 + 四类账 + 崩坏点
+│   └── 08-ledger.md                批次开工规程 + 五类账（含承接账）+ 崩坏点
 ├── templates/
-│   ├── episode-format.md           三档单集排版模板
-│   ├── project-bible.md            立项单 + 人物表 + 四幕骨架 + 回合表
-│   └── ledger.md                   台账空表（9 个机检字段）
+│   ├── episode-format.md           三档单集排版模板（含【上集承接】）
+│   ├── project-bible.md            立项单 + 人物表 + 四幕骨架 + 链条式分集规划
+│   └── ledger.md                   台账空表（11 个机检字段 + 承接账）
 ├── examples/ep01-demo.md           标准档单集示例（过机检）
 └── scripts/
-    ├── validate_episode.py         单集机检（E1~E11）
-    └── batch_preflight.py          批次开工门控（P1~P8）
+    ├── validate_episode.py         单集机检 · 集内（E1~E11）
+    ├── check_chaining.py           跨集承接机检（C1~C4 + D1 诊断）
+    └── batch_preflight.py          批次开工门控（P1~P9）
 ```
 
 ---
