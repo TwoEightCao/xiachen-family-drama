@@ -57,6 +57,26 @@ check_chaining.py    机检（跨集）→ 这一集有没有接住上一集
 
 ---
 
+## 双模型分工（可选，v1.5.0）
+
+文笔活和记账活可以分开跑：**主 agent 当「账房」（立项/大纲/分集/五类账/台账更新/跑机检/判门控），单集正文外包给「写手子代理」**（例如 Gemini），判定仍归本地 Python。单模型也能跑通全流程——没有写手路由时自动退化。
+
+```text
+主 agent（账房）＝ 立项 / 大纲 / 分集 / 五类账 / 台账更新 / 机检 / 门控
+写手子代理       ＝ 只写 episodes/epNNN.md，台账只读
+判定             ＝ validate_episode.py + check_chaining.py + batch_preflight.py
+```
+
+派活用 [`templates/writer-handoff.md`](templates/writer-handoff.md)（填好即作为子代理提示词）；工序与硬规则见 `SKILL.md` §二。
+
+**为什么换写手不会写崩**：写手与账房之间的接口是**承接账**，而这个契约是**按物件签的，不是按文字签的**——`check_chaining.py` C2 只问「承接账声明的物件有没有出现在下一集开场窗口」，不问措辞。写手可以自由改文笔、换句式，只要那一帧里的**东西**还在，就通过；把物件换掉或改丢，就报 C2。
+
+> **文笔归写手，账归账房，物件的存续由机检裁决。**
+
+完整场景（含 DSH 里子代理路由白名单的两个坑、故障排查表）见 [`docs/使用教程.md`](docs/使用教程.md) §9.5 场景 S9。
+
+---
+
 ## 安装
 
 ### 方式一：克隆到 skills 目录（最简单）
@@ -228,7 +248,8 @@ xiachen-family-drama/
 ├── templates/
 │   ├── episode-format.md           三档单集排版模板（含【上集承接】）
 │   ├── project-bible.md            立项单 + 人物表 + 四幕骨架 + 链条式分集规划
-│   └── ledger.md                   台账空表（11 个机检字段 + 承接账）
+│   ├── ledger.md                   台账空表（11 个机检字段 + 承接账）
+│   └── writer-handoff.md           写手交接单（外包正文给子代理时填）
 ├── examples/ep01-demo.md           标准档单集示例（过机检）
 └── scripts/
     ├── validate_episode.py         单集机检 · 集内（E1~E11）

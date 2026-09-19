@@ -86,6 +86,7 @@ SOFTWARE.
 | `templates/episode-format.md` | `short-drama-factory/templates/episode-format.md` | 保留三档单集排版骨架；新增必填 `【档位】` 字段、**必填 `【上集承接】` 字段**（v1.4.0）与断章五字段格式对齐；排版禁令由四条扩为五条 |
 | `templates/ledger.md` | `short-drama-factory/templates/ledger.md` | 保留头部字段 + 四类账 + 回合表 + 付费墙结构；字段按本赛道重排（新增赛道／主角／底牌／反派四层）；**新增第五类账「承接账」与两个叙事位置游标**（v1.4.0，见 §4） |
 | `templates/project-bible.md` | — | 原创（整合立项单 / 人物表 / 四幕骨架 / 单元链 / 回合表 / 付费墙 / 交付目录；v1.4.0 起分集规划改为链条式） |
+| `templates/writer-handoff.md` | — | 原创（v1.5.0）。写手交接单：把单集正文外包给子代理时的完整提示词模板 + 账房验收流程 |
 | `scripts/validate_episode.py` | 思路参考 `short-drama-factory/scripts/validate_episode.py` | 原创实现。自行定义 E1~E11 检查项与档位识别机制 |
 | `scripts/check_chaining.py` | — | 原创（v1.4.0）。跨集承接机检 C1~C4 + 断章复活延迟诊断 |
 | `scripts/batch_preflight.py` | — | 原创。批次开工门控 P1~P9 + 上下文重建摘要（含叙事位置） |
@@ -123,7 +124,8 @@ SOFTWARE.
 - **三个校验脚本**及其规格体系（E1~E11、P1~P9、C1~C4）。
 - **承接层数据结构与检查**（v1.4.0）：第五类账「承接账」、两个叙事位置游标、`check_chaining.py` 跨集承接机检、分集规划的链条式起草纪律、单集模板的 `【上集承接】` 必填字段。这一层**不在上游范围内** —— 上游与本项目 v1.3.0 及更早版本都只做「集内」质检，因而会出现「集集合格、连起来看却每集重新入场」。
 - **批次开工门控与上下文重建摘要**机制。
-- `templates/project-bible.md`、`examples/ep01-demo.md`、`docs/使用教程.md`。
+- **双模型分工工序**（v1.5.0）：账房（主 agent）与写手（子代理）的职责切分、写手交接单模板、以及「承接账作为跨模型接口契约」的判据说明。同样**不在上游范围内**。
+- `templates/project-bible.md`、`templates/writer-handoff.md`、`examples/ep01-demo.md`、`docs/使用教程.md`。
 
 ---
 
