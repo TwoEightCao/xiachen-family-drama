@@ -37,6 +37,13 @@
 
 > 写手一改账，「承接账」这个跨模型契约立刻失效 —— 这不是风格问题，是数据完整性问题。
 
+**这三条是「规格级」约束，不是沙箱。** 必须清楚：子代理继承与主 agent 相同的文件系统权限，**DSH 目前没有 per-subagent 的文件范围限制**（`subagent` 工具的参数只有 `provider` / `model` / `reasoning_effort` / `prompt` 等，没有路径白名单）。所以这三条的执行靠两件事，缺一不可：
+
+1. **交接单里写清楚**（第 5 步的提示词里已包含）—— 这是让写手**不去做**；
+2. **账房事后机械核验**（见「五、账房验收」第 1 步）—— 这是让写手**做了会被发现**。
+
+**只靠第 1 条等于没约束。** 不要因为交接单里写了「只读」就跳过验收第 1 步。
+
 ---
 
 ## 三、 交接单正文（整段复制给写手）
@@ -106,15 +113,56 @@ python3 <skill>/scripts/validate_episode.py <项目>/episodes/epNNN.md
 
 ## 五、 账房验收（写手回报后立刻做，不可跳过）
 
-```text
-1. 写入是否越界：git status / 目录比对 —— 确认只有 episodes/ 下新增或修改
-2. 集内机检：python3 "<skill>/scripts/validate_episode.py" <项目>/episodes/epNNN.md   # 逐集
-3. 跨集机检：python3 "<skill>/scripts/check_chaining.py" <项目目录> --from <X> --to <Y>
-4. 台账登记（这一步必须账房自己做，不许外包）：
-   承接账逐集补行 → 本集断在 / 下集承接 / 上一集「悬」改「收」并填兑现集 → 头部两个游标同步
-5. 批次门控：python3 "<skill>/scripts/batch_preflight.py" <项目目录> --from <下一批首集> --to <下一批末集>
-6. 任一步 FAIL：先判是「写手写错」还是「账房分集规划本身有洞」——
-   前者退回写手重写该集；后者由账房先改分集规划与承接账，再重派。
+**1. 写入是否越界** —— 这是**唯一能证明写手没动账的机械手段**，必须做。项目目录**不一定是 git 仓库**，所以给两条路。
+
+*路线 A（推荐，尤其 80 集长篇）：先给项目目录 `git init`。*
+
+```bash
+cd <项目目录> && git init && git add -A && git commit -m "baseline: 派活前"
+# 写手回报后
+git status --short        # 只应出现 episodes/ 下的改动
+git diff --stat           # 若 台账.md / 分集规划.md 出现在这里 → 写手越界，立即回退
 ```
+
+代价是一次 `git init`，换来的是每集可 diff、可回滚 —— 长篇连载值这个钱。
+
+*路线 B（不想 git init 时的最小做法）：派活前后各拍一次哈希快照。*
+
+```bash
+# 派活前
+md5 -q <项目目录>/台账.md > /tmp/ledger.before      # macOS；Linux 用 md5sum
+# 写手回报后
+md5 -q <项目目录>/台账.md > /tmp/ledger.after
+diff /tmp/ledger.before /tmp/ledger.after && echo "台账未被改动 ✓"
+```
+
+对 `分集规划.md` / 人物圣经 / 立项单 同样拍一遍。
+
+> ⚠️ 不要用 `ls -l` 看时间戳代替 —— 同一秒内的修改会漏掉，而写手改账通常是瞬间完成的。
+> ⚠️ 若项目目录不是 git 仓库，`git status` 会直接报 `not a git repository`；别把这句报错当成「检查通过了」。
+
+**2. 集内机检**（逐集）
+
+```bash
+python3 "<skill>/scripts/validate_episode.py" <项目>/episodes/epNNN.md
+```
+
+**3. 跨集机检**
+
+```bash
+python3 "<skill>/scripts/check_chaining.py" <项目目录> --from <X> --to <Y>
+```
+
+**4. 台账登记**（这一步必须账房自己做，不许外包）
+承接账逐集补行 → 本集断在 / 下集承接 / 上一集「悬」改「收」并填兑现集 → 头部两个游标同步。
+
+**5. 批次门控**
+
+```bash
+python3 "<skill>/scripts/batch_preflight.py" <项目目录> --from <下一批首集> --to <下一批末集>
+```
+
+**6. 任一步 FAIL**：先判是「写手写错」还是「账房分集规划本身有洞」——
+前者退回写手重写该集；后者由账房先改分集规划与承接账，再重派。
 
 > **判定永远归账房，不归写手。** 写手的自评、自信度、以及「我觉得接住了」都不构成验收证据。
