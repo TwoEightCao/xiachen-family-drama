@@ -83,7 +83,7 @@ install_one() {
     if [ "$cur" = "$SRC" ]; then
       ok "已是最新链接：$dest"
     else
-      skip "$dest 已存在且指向别处（$cur），不覆盖。如需替换请先手动删除。"
+      skip "$dest 已存在且指向别处（${cur}），不覆盖。如需替换请先手动删除。"
     fi
     return
   fi

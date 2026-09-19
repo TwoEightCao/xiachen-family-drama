@@ -55,11 +55,11 @@ resolve_token() {
   tr -d '\r\n' < "$TOKEN_FILE"
 }
 
-TOKEN="$(resolve_token)" || die "未找到 token。请设置环境变量 XIACHEN_GH_TOKEN，或写入 $TOKEN_FILE（chmod 600）"
+TOKEN="$(resolve_token)" || die "未找到 token。请设置环境变量 XIACHEN_GH_TOKEN，或写入 ${TOKEN_FILE}（chmod 600）"
 
 # ---------- 2. 安全校验：token 文件不得位于仓库内 ----------
 case "$(cd "$(dirname "$TOKEN_FILE")" 2>/dev/null && pwd)/$(basename "$TOKEN_FILE")" in
-  "$REPO_ROOT"/*) die "token 文件位于仓库内（$TOKEN_FILE）——这会把密钥推上 GitHub。请移到仓库外。" ;;
+  "$REPO_ROOT"/*) die "token 文件位于仓库内（${TOKEN_FILE}）——这会把密钥推上 GitHub。请移到仓库外。" ;;
 esac
 
 # 仓库里若出现 token 字面量，立刻拒绝
@@ -86,7 +86,7 @@ if [ "$VERIFY_ONLY" = 0 ]; then
     git status --short | sed 's/^/  /'
     if [ -z "$MSG" ]; then
       MSG="chore: 更新 $(date '+%Y-%m-%d %H:%M')"
-      say "（未指定 -m，使用默认说明：$MSG）"
+      say "（未指定 -m，使用默认说明：${MSG}）"
     fi
     if [ "$DRY_RUN" = 1 ]; then
       say "PLAN  git add -A && git commit -m \"$MSG\""
@@ -108,7 +108,7 @@ if [ "$VERIFY_ONLY" = 0 ]; then
     OUT="$(git push "https://${TOKEN}@${REMOTE_URL#https://}" "$BRANCH" 2>&1)"
     RC=$?
     printf '%s\n' "$OUT" | sed "s/${TOKEN}/***TOKEN***/g"
-    [ $RC -eq 0 ] || die "推送失败（退出码 $RC）"
+    [ $RC -eq 0 ] || die "推送失败（退出码 ${RC}）"
     ok "已推送 $LOCAL_SHA"
   fi
 fi
@@ -119,9 +119,9 @@ if [ "$DRY_RUN" = 1 ]; then say "（DRY-RUN 跳过复验）"; exit 0; fi
 
 REMOTE_SHA="$(git ls-remote "$REMOTE_URL" "refs/heads/$BRANCH" 2>/dev/null | awk '{print $1}')"
 if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
-  ok "远端 $BRANCH = 本地 HEAD（$LOCAL_SHA）"
+  ok "远端 $BRANCH = 本地 HEAD（${LOCAL_SHA}）"
 else
-  die "远端 SHA（$REMOTE_SHA）与本地 HEAD（$LOCAL_SHA）不一致"
+  die "远端 SHA（${REMOTE_SHA}）与本地 HEAD（${LOCAL_SHA}）不一致"
 fi
 
 # 从远端真正克隆一份跑自检，验证「别人下载能不能用」
