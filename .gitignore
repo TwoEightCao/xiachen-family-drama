@@ -27,11 +27,20 @@ episodes/
 *.bak
 /tmp/
 
-# --- 凭据（纵深防御：token 绝不应出现在仓库里）---
+# --- 凭据 / 设置文件（纵深防御：token、key、DSH 配置绝不应出现在仓库里）---
 gh_token
 *.token
 .env
 .env.*
-credentials*
+# ⚠️ 修正记录（v1.5.1）：原写法 `credentials*` **不匹配以点开头的 basename**，
+# 而 DSH 用的凭据文件名恰恰是 `.credentials.yaml` —— 等于这道防线是空的。
+# 改为两侧通配，并把 DSH / 常见设置文件名显式列出。
+*credentials*
+settings.yaml
+config.yaml
+# 本仓库是纯文本规格（.md / .py / .sh），不含任何合法的 YAML 配置；
+# 此目录下一旦出现 YAML，基本可以断定是误加的配置或凭据。
+*.yaml
+*.yml
 *_rsa
 *_ed25519

@@ -62,12 +62,26 @@ case "$(cd "$(dirname "$TOKEN_FILE")" 2>/dev/null && pwd)/$(basename "$TOKEN_FIL
   "$REPO_ROOT"/*) die "token 文件位于仓库内（${TOKEN_FILE}）——这会把密钥推上 GitHub。请移到仓库外。" ;;
 esac
 
-# 仓库里若出现 token 字面量，立刻拒绝
-# （前缀拆成变量拼接，避免本脚本自身的源码被误判为命中）
-PAT_PREFIX='ghp'; PAT2_PREFIX='github_pat'
+# 仓库里若出现 token/key 字面量，立刻拒绝。
+# ⚠️ 本段的所有前缀都必须经**变量拼接**再进模式串 —— 否则这些前缀会以字面量
+#    出现在本脚本源码里，被下面第一条「长度无关」的检查当成命中而自我误报。
+#    （v1.5.1 踩过一次：把 github 个人令牌的前缀连着下划线直接写进正则与注释，
+#      结果连干净仓库都 FAIL。注释里也一样不能出现那种字面量。）
+GH_PREFIX='gh'; GH_KINDS='pousr'
+PAT_PREFIX="${GH_PREFIX}${GH_KINDS:0:1}"; PAT2_PREFIX='github_pat'
+GOOG_PREFIX='AIza'; OAI_PREFIX='sk-'
+KEY_RE="(${GH_PREFIX}[${GH_KINDS}]_[A-Za-z0-9]{30,}|${PAT2_PREFIX}_[A-Za-z0-9_]{30,}|${GOOG_PREFIX}[0-9A-Za-z_-]{30,}|${OAI_PREFIX}[A-Za-z0-9_-]{30,})"
 if git rev-parse --git-dir >/dev/null 2>&1; then
-  if git grep -qI -e "${PAT_PREFIX}_" -e "${PAT2_PREFIX}_" -- . 2>/dev/null; then
-    die "仓库已跟踪的文件里出现 token 字面量，先清理再发布"
+  if git grep -qI -e "${PAT_PREFIX}_" -e "${PAT2_PREFIX}_" -- . 2>/dev/null \
+     || git grep -qIE -e "$KEY_RE" -- . 2>/dev/null; then
+    die "仓库已跟踪的文件里出现 token/key 字面量，先清理再发布"
+  fi
+  # 凭据 / 设置文件绝不允许被跟踪（.gitignore 是提示，这里是闸门）
+  SUSPECT="$(git ls-files | grep -E '(^|/)(\.credentials.*|credentials\.(ya?ml|json)|settings\.ya?ml|config\.ya?ml|\.env.*)$' || true)"
+  if [ -n "$SUSPECT" ]; then
+    say "以下凭据/设置文件已被 git 跟踪："
+    printf '%s\n' "$SUSPECT" | sed 's/^/  /'
+    die "禁止发布：请 git rm --cached 这些文件，并确认 .gitignore 生效"
   fi
 fi
 
