@@ -71,13 +71,26 @@ GH_PREFIX='gh'; GH_KINDS='pousr'
 PAT_PREFIX="${GH_PREFIX}${GH_KINDS:0:1}"; PAT2_PREFIX='github_pat'
 GOOG_PREFIX='AIza'; OAI_PREFIX='sk-'
 KEY_RE="(${GH_PREFIX}[${GH_KINDS}]_[A-Za-z0-9]{30,}|${PAT2_PREFIX}_[A-Za-z0-9_]{30,}|${GOOG_PREFIX}[0-9A-Za-z_-]{30,}|${OAI_PREFIX}[A-Za-z0-9_-]{30,})"
+
+# 字面量扫描。$1 = 额外给 git grep 的开关（留空=只扫已跟踪文件）
+scan_literals() {
+  git grep -qI "$@" -e "${PAT_PREFIX}_" -e "${PAT2_PREFIX}_" -- . 2>/dev/null && return 0
+  git grep -qIE "$@" -e "$KEY_RE" -- . 2>/dev/null && return 0
+  return 1
+}
+# 凭据/设置文件是否已被跟踪
+scan_suspect_files() {
+  git ls-files | grep -E '(^|/)(\.credentials.*|credentials\.(ya?ml|json)|settings\.ya?ml|config\.ya?ml|\.env.*|writer_?key.*|\.writer-log.*)$' || true
+}
+
 if git rev-parse --git-dir >/dev/null 2>&1; then
-  if git grep -qI -e "${PAT_PREFIX}_" -e "${PAT2_PREFIX}_" -- . 2>/dev/null \
-     || git grep -qIE -e "$KEY_RE" -- . 2>/dev/null; then
-    die "仓库已跟踪的文件里出现 token/key 字面量，先清理再发布"
+  # ⚠️ 必须带 --untracked：**新增文件在 git add 之前是未跟踪的**，只扫已跟踪文件
+  #    会系统性漏掉「最容易引入泄露的那一批文件」（v1.6.0 踩过：新脚本里的
+  #    自检夹具形状像真 key，发布时扫不到，提交完才被扫出来）。
+  if scan_literals --untracked; then
+    die "工作区（含未跟踪文件）里出现 token/key 字面量，先清理再发布"
   fi
-  # 凭据 / 设置文件绝不允许被跟踪（.gitignore 是提示，这里是闸门）
-  SUSPECT="$(git ls-files | grep -E '(^|/)(\.credentials.*|credentials\.(ya?ml|json)|settings\.ya?ml|config\.ya?ml|\.env.*|writer_?key.*|\.writer-log.*)$' || true)"
+  SUSPECT="$(scan_suspect_files)"
   if [ -n "$SUSPECT" ]; then
     say "以下凭据/设置文件已被 git 跟踪："
     printf '%s\n' "$SUSPECT" | sed 's/^/  /'
@@ -105,7 +118,20 @@ if [ "$VERIFY_ONLY" = 0 ]; then
     if [ "$DRY_RUN" = 1 ]; then
       say "PLAN  git add -A && git commit -m \"$MSG\""
     else
-      git add -A && git commit -q -m "$MSG" && ok "已提交"
+      git add -A
+      # 暂存后再扫一遍索引 —— 这才是「即将被提交的那一份」的权威口径
+      if scan_literals --cached; then
+        git reset -q
+        die "暂存区里出现 token/key 字面量（已撤销 git add），先清理再发布"
+      fi
+      STAGED_SUSPECT="$(git diff --cached --name-only | grep -E '(^|/)(\.credentials.*|credentials\.(ya?ml|json)|settings\.ya?ml|config\.ya?ml|\.env.*|writer_?key.*|\.writer-log.*)$' || true)"
+      if [ -n "$STAGED_SUSPECT" ]; then
+        git reset -q
+        say "暂存区里的凭据/设置文件："
+        printf '%s\n' "$STAGED_SUSPECT" | sed 's/^/  /'
+        die "禁止发布（已撤销 git add）：请把 ^ 这些文件移出仓库或加进 .gitignore"
+      fi
+      git commit -q -m "$MSG" && ok "已提交"
     fi
   else
     ok "工作区干净，无需提交"

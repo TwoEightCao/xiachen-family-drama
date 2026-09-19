@@ -331,10 +331,14 @@ def self_test():
     print("  OK  字符串 / 分片 / 围栏 / 空响应")
 
     print("[self-test] 掩码：")
-    m = mask("error: bad key sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456 rejected", "sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456")
-    assert "sk-ABCDEF" not in m, "显式密钥未抹掉"
-    m2 = mask("other sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ123456 here", "different-key")
-    assert "sk-ABCDEF" not in m2, "兜底正则未抹掉"
+    # ⚠️ 夹具必须在**运行时**拼出来，不能在源码里写成连续的密钥形状字符串 ——
+    #    否则 publish.sh 的字面量闸门会把它当成真 key（v1.6.0 踩过这个坑）。
+    fake = "sk-" + ("A" * 32)
+    m = mask("error: bad key " + fake + " rejected", fake)
+    assert fake not in m, "显式密钥未抹掉"
+    assert "***KEY***" in m, "应替换为掩码"
+    m2 = mask("other " + fake + " here", "different-key")
+    assert fake not in m2, "兜底正则未抹掉"
     print("  OK  显式替换 + sk- 兜底正则")
 
     print("[self-test] 请求体构造：")
