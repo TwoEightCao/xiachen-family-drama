@@ -215,6 +215,7 @@ xiachen-family-drama/
 ├── README.md / LICENSE / NOTICE.md / CHANGELOG.md
 ├── install.sh                      多平台幂等安装
 ├── docs/使用教程.md                 8 种出剧场景全流程教程
+├── docs/发布流程.md                 发布子代理作业手册（含 token 轮换与安全红线）
 ├── references/
 │   ├── 01-genre-map.md             F1~F8 八赛道 × 现成证据六档链
 │   ├── 02-emotional-contract.md    情绪契约 + 单元链 + 往返六档
@@ -232,7 +233,8 @@ xiachen-family-drama/
 └── scripts/
     ├── validate_episode.py         单集机检 · 集内（E1~E11）
     ├── check_chaining.py           跨集承接机检（C1~C4 + D1 诊断）
-    └── batch_preflight.py          批次开工门控（P1~P9）
+    ├── batch_preflight.py          批次开工门控（P1~P9）
+    └── publish.sh                  安全发布器（一次性 token URL + 远端复验，不落盘密钥）
 ```
 
 ---

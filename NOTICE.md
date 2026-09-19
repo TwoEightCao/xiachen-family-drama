@@ -91,6 +91,8 @@ SOFTWARE.
 | `scripts/batch_preflight.py` | — | 原创。批次开工门控 P1~P9 + 上下文重建摘要（含叙事位置） |
 | `examples/ep01-demo.md` | — | 原创示例 |
 | `docs/使用教程.md` | — | 原创 |
+| `docs/发布流程.md` | — | 原创（发布子代理作业手册：token 存储 / 轮换 / 安全红线 / 故障处理） |
+| `scripts/publish.sh` | — | 原创。安全发布器：一次性 token URL、拒绝把密钥推上仓库、推送后从远端克隆复验 |
 | `CHANGELOG.md` | — | 原创 |
 
 **改编程度实测**：对本仓库 `*.md` 与两个上游来源做逐行比对（去空白、长度 ≥12 字的行），完全一致的行占比 **8.0%**；其中 `templates/ledger.md` 26.5%、`references/08-ledger.md` 15.4%、`templates/episode-format.md` 14.5%。其余为改写或新增。此数据用于如实说明改编深度，不作精确法律计量。
