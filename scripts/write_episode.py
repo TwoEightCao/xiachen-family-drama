@@ -38,10 +38,11 @@ DSH 里子代理换模型受**会话级白名单**限制（`subagent-model-selec
   1. 环境变量 `WRITER_API_KEY`
   2. `--key-file`，默认 `~/.config/xiachen/writer_key`
 
-端点读取顺序：
+端点读取顺序（**本脚本不内置任何端点**，避免把某个中转站写死进公开仓库）：
   1. `--base-url`
   2. 环境变量 `WRITER_BASE_URL`
-  3. 默认 `https://new.dszyym.com/v1`
+  3. 本地文件 `~/.config/xiachen/writer_base_url`（一行一个 URL，仓库之外）
+  4. 都没有 → 报错并给出写入指引
 
 硬校验：key 文件若位于**某个 git 仓库内** → 直接拒绝运行（防把密钥推上 GitHub）。
 所有输出经过掩码，token 不进日志；产出文件里只有剧本正文。
@@ -60,7 +61,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_BASE_URL = "https://new.dszyym.com/v1"
+DEFAULT_BASE_URL_FILE = "~/.config/xiachen/writer_base_url"   # 本机私有，绝不入库
 DEFAULT_KEY_FILE = "~/.config/xiachen/writer_key"
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_TIMEOUT = 300
@@ -68,6 +69,22 @@ EFFORTS = ("none", "minimal", "low", "medium", "high")
 
 
 # ---------- 密钥与掩码 ----------
+
+def resolve_base_url(cli_value):
+    """返回 (base_url, 来源说明)。**不在代码里内置任何端点。**"""
+    if cli_value:
+        return cli_value.rstrip("/"), "--base-url"
+    env = os.environ.get("WRITER_BASE_URL")
+    if env:
+        return env.strip().rstrip("/"), "环境变量 WRITER_BASE_URL"
+    p = Path(os.path.expanduser(DEFAULT_BASE_URL_FILE))
+    if p.is_file():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                return line.rstrip("/"), str(p)
+    return None, f"未配置（可写入 {p}）"
+
 
 def resolve_key(key_file: str):
     """返回 (key, 来源说明)。不回显 key 本身。"""
@@ -183,7 +200,8 @@ def main():
     ap.add_argument("--system-file", help="可选：系统提示词文件")
     ap.add_argument("--out", help="产出文件路径，通常 episodes/epNNN.md")
     ap.add_argument("--model", default="gemini-3.1-pro-preview", help="模型 id")
-    ap.add_argument("--base-url", default=None, help=f"OpenAI 兼容端点，默认 {DEFAULT_BASE_URL}")
+    ap.add_argument("--base-url", default=None,
+                    help="OpenAI 兼容端点；省略时读 $WRITER_BASE_URL 或 " + DEFAULT_BASE_URL_FILE)
     ap.add_argument("--key-file", default=DEFAULT_KEY_FILE, help="密钥文件路径")
     ap.add_argument("--reasoning-effort", default="high", choices=EFFORTS,
                     help="none/minimal 可用于省思考 token；默认 high")
@@ -193,6 +211,10 @@ def main():
     ap.add_argument("--log", default=None, help="调用元数据 jsonl（默认 <out目录>/.writer-log.jsonl）")
     ap.add_argument("--raw-out", default=None, help="可选：存原始 JSON 响应，便于排查")
     ap.add_argument("--force", action="store_true", help="允许覆盖已存在的 --out")
+    ap.add_argument("--validate", action="store_true",
+                    help="写完后跑 validate_episode.py；FAIL 则重生成")
+    ap.add_argument("--retry", type=int, default=0,
+                    help="配合 --validate：FAIL 时最多重生成几次（默认 0＝不重试）")
     ap.add_argument("--dry-run", action="store_true", help="只打印请求概要，不发网络请求")
     ap.add_argument("--self-test", action="store_true", help="离线自检（不联网）")
     args = ap.parse_args()
@@ -223,7 +245,7 @@ def main():
         prompt = args.prompt
     system = Path(args.system_file).read_text(encoding="utf-8") if args.system_file else None
 
-    base_url = args.base_url or os.environ.get("WRITER_BASE_URL") or DEFAULT_BASE_URL
+    base_url, url_src = resolve_base_url(args.base_url)
     key, src = resolve_key(args.key_file)
 
     # ---- key 安全校验：绝不允许密钥文件位于 git 仓库内 ----
@@ -238,7 +260,7 @@ def main():
     body = build_body(args.model, prompt, system, args.reasoning_effort,
                       args.max_tokens, args.temperature)
 
-    print(f"端点  {base_url}")
+    print(f"端点  {base_url or '（未配置）'}   来源 {url_src}")
     print(f"模型  {args.model}    reasoning_effort={args.reasoning_effort}")
     print(f"密钥  {src}（不回显）")
     print(f"提示词 {len(prompt)} 字符   产出 {out}")
@@ -250,45 +272,81 @@ def main():
         print(f"  提示词 sha256={hashlib.sha256(prompt.encode()).hexdigest()[:16]}")
         return 0
 
+    if not base_url:
+        print(f"FAIL  未配置写手端点。三选一：")
+        print(f"        --base-url https://<你的端点>/v1")
+        print(f"        环境变量 WRITER_BASE_URL")
+        print(f"        写入 {os.path.expanduser(DEFAULT_BASE_URL_FILE)}（chmod 600，仓库之外）")
+        return 1
+
     if not key:
         print("FAIL  未找到密钥。请写入 ~/.config/xiachen/writer_key（chmod 600），")
         print("      或设置环境变量 WRITER_API_KEY。")
         return 1
 
-    status, raw = call_api(base_url, key, body, args.timeout)
-    raw_masked = mask(raw, key)
+    # ---- 生成（可选：跑机检，FAIL 则有界重生成）----
+    validator = Path(__file__).resolve().parent / "validate_episode.py"
+    attempts = (args.retry + 1) if args.validate else 1
+    u = {}
+    content = ""
+    for attempt in range(1, attempts + 1):
+        if attempts > 1:
+            print(f"--- 第 {attempt}/{attempts} 次生成 ---")
+        status, raw = call_api(base_url, key, body, args.timeout)
+        raw_masked = mask(raw, key)
 
-    if args.raw_out:
-        Path(args.raw_out).write_text(raw_masked, encoding="utf-8")
+        if args.raw_out:
+            Path(args.raw_out).write_text(raw_masked, encoding="utf-8")
 
-    if status != 200:
-        print(f"FAIL  HTTP {status}")
-        print("      " + raw_masked[:600].replace("\n", " "))
-        return 1
+        if status != 200:
+            print(f"FAIL  HTTP {status}")
+            print("      " + raw_masked[:600].replace("\n", " "))
+            if attempt >= attempts:
+                return 1
+            continue
 
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"FAIL  响应不是 JSON：{e}")
-        print("      " + raw_masked[:400].replace("\n", " "))
-        return 1
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as e:
+            print(f"FAIL  响应不是 JSON：{e}")
+            if attempt >= attempts:
+                return 1
+            continue
 
-    if payload.get("error"):
-        print(f"FAIL  端点返回错误：{str(payload['error'])[:400]}")
-        return 1
+        if payload.get("error"):
+            print(f"FAIL  端点返回错误：{str(payload['error'])[:400]}")
+            if attempt >= attempts:
+                return 1
+            continue
 
-    content = extract_content(payload)
-    if not content.strip():
-        print("FAIL  响应里没有正文（choices[0].message.content 为空）")
-        return 1
+        content = extract_content(payload)
+        if not content.strip():
+            print("FAIL  响应里没有正文（choices[0].message.content 为空）")
+            if attempt >= attempts:
+                return 1
+            continue
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(content.rstrip() + "\n", encoding="utf-8")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content.rstrip() + "\n", encoding="utf-8")
+        u = usage_summary(payload)
+        print(f"OK    已写入 {out}（{len(content)} 字符）")
+        print(f"      用量 prompt={u['prompt_tokens']} completion={u['completion_tokens']} "
+              f"thoughts={u['thoughts_tokens']} finish={u['finish_reason']}")
 
-    u = usage_summary(payload)
-    print(f"OK    已写入 {out}（{len(content)} 字符）")
-    print(f"      用量 prompt={u['prompt_tokens']} completion={u['completion_tokens']} "
-          f"thoughts={u['thoughts_tokens']} finish={u['finish_reason']}")
+        if not args.validate or not validator.is_file():
+            break
+        import subprocess
+        r = subprocess.run([sys.executable, str(validator), str(out)],
+                           capture_output=True, text=True)
+        tail = (r.stdout or "").strip().split("\n")
+        print("      机检 " + " | ".join(x for x in tail[-2:] if x.strip()))
+        if r.returncode == 0:
+            break
+        if attempt >= attempts:
+            print(f"FAIL  机检未通过，且已重试 {attempts - 1} 次。最后输出：")
+            print("      " + " | ".join(x for x in tail if x.strip())[:400])
+            return 1
+        print(f"      机检 FAIL，重生成（第 {attempt + 1} 次）—— 同提示词多次生成存在体量方差")
 
     # ---- 调用元数据（不含密钥，供账房审计）----
     log = Path(args.log) if args.log else out.parent / ".writer-log.jsonl"
@@ -356,6 +414,19 @@ def self_test():
                        "choices": [{"finish_reason": "stop"}]})
     assert u["thoughts_tokens"] == 107 and u["finish_reason"] == "stop"
     print("  OK  含 gemini_usage_metadata 的用量解析")
+
+    print("[self-test] 端点解析（不得内置任何具体端点）：")
+    import inspect as _inspect
+    _src = _inspect.getsource(sys.modules[__name__])
+    # 通用不变量：源码里不许出现「带真实主机名的 URL」。占位符形如 https://<你的端点>
+    # 不会命中（主机名字符类不含 <）。这条检查不依赖任何一个具体域名，因而不泄露域名。
+    _urls = re.findall(r"https?://[A-Za-z0-9][A-Za-z0-9.\-]*", _src)
+    _urls = [u for u in _urls if not re.search(r"(example\.(test|com)|localhost)", u)]
+    assert not _urls, f"源码里出现硬编码端点：{_urls}（端点必须来自 --base-url / 环境变量 / 本机文件）"
+    assert getattr(sys.modules[__name__], "DEFAULT_BASE_URL", None) is None, "不应再有内置端点常量"
+    u, s = resolve_base_url("https://example.test/v1/")
+    assert u == "https://example.test/v1" and s == "--base-url", "CLI 端点未去尾斜杠"
+    print("  OK  无内置端点 / CLI 优先级 / 通用不变量生效")
 
     print("[self-test] 仓库内密钥文件检测：")
     import tempfile

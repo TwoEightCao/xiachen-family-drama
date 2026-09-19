@@ -96,6 +96,42 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     printf '%s\n' "$SUSPECT" | sed 's/^/  /'
     die "禁止发布：请 git rm --cached 这些文件，并确认 .gitignore 生效"
   fi
+
+  # 文档 lint：标题里出现两个日期 = 脚本化编辑把标题重复拼接了（本项目犯过 4 次）
+  # ⚠️ 注意枚举要用 --cached --others --exclude-standard；git ls-files 没有 --untracked
+  #    这个选项（v1.6.2 踩过：写了无效选项 → 枚举为空 → 闸门静默失效、永远通过）。
+  MD_FILES="$(git ls-files --cached --others --exclude-standard '*.md' 2>/dev/null)"
+  if [ -z "$MD_FILES" ]; then
+    die "文档 lint 无法枚举 .md 文件（git ls-files 出错？）——拒绝在检查失效的情况下发布"
+  fi
+  DOC_LINT="$(printf '%s\n' "$MD_FILES" | while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    grep -nE '^#+ .*[0-9]{4}-[0-9]{2}-[0-9]{2}.*[0-9]{4}-[0-9]{2}-[0-9]{2}' "$f" 2>/dev/null | sed "s|^|${f}:|"
+  done)"
+  if [ -n "$DOC_LINT" ]; then
+    say "以下标题里出现了两个日期（重复标题）："
+    printf '%s\n' "$DOC_LINT" | sed 's/^/  /' | head -10
+    die "禁止发布：修掉重复标题再发（多半是脚本化替换把锚点标题又拼了一遍）"
+  fi
+
+  # 本机私有域名 deny-list：这些字样绝不允许出现在公开仓库里。
+  # 清单存在仓库之外（~/.config/xiachen/private_hosts，一行一个），
+  # 所以这份「不能出现的东西」本身也不会泄露。
+  PRIVATE_HOSTS_FILE="${XIACHEN_PRIVATE_HOSTS:-$HOME/.config/xiachen/private_hosts}"
+  if [ -f "$PRIVATE_HOSTS_FILE" ]; then
+    HIT=0
+    while IFS= read -r h || [ -n "$h" ]; do
+      case "$h" in ''|\#*) continue ;; esac
+      if git grep -qI --untracked -F -e "$h" -- . 2>/dev/null; then
+        say "命中私有域名/字样：${h}"
+        git grep -nI --untracked -F -e "$h" -- . 2>/dev/null | sed 's/^/  /' | head -10
+        HIT=1
+      fi
+    done < "$PRIVATE_HOSTS_FILE"
+    if [ "$HIT" = 1 ]; then
+      die "仓库里出现本机私有端点/域名（清单见 ${PRIVATE_HOSTS_FILE}）。端点必须由使用者自己配置，不得写死进仓库。"
+    fi
+  fi
 fi
 
 REMOTE_URL="$(git remote get-url "$REMOTE_NAME" 2>/dev/null)" || die "未配置远程 $REMOTE_NAME"

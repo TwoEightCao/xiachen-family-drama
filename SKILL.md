@@ -1,6 +1,6 @@
 ---
 name: xiachen-family-drama
-version: 1.6.1
+version: 1.6.2
 description: "下沉中老年家庭伦理短剧编剧：专做婆媳清算、白眼狼子女、寻亲认子、家产争夺、养老困境、保姆护工、黄昏恋骗婚、拆迁亲戚八条下沉赛道的竖屏短剧/AI 漫剧剧本。覆盖：一句话点子→立项单→人物圣经→60/80/100 集大纲→情绪契约单元链→往返回合表→分集规划→逐集正文→台词去 AI 味→断章卡点→合规自检→跨集连写。当用户提到：写下沉短剧、中老年短剧、婆媳剧、寻亲剧、养老剧、家产剧、家庭伦理短剧、丈母娘/婆婆/姥爷/奶奶题材、催泪苦情剧、AI 漫剧剧本、红果/抖音下沉剧、写一集剧本、设计断章卡点/黄金3秒/爽点/执念、按集卡点留悬念等时使用。默认输出结构化 Markdown 剧本（立项单/人物表/总纲/分集/单集正文）。"
 user-invocable: true
 metadata:
@@ -59,6 +59,13 @@ list_subagent_models provider=<id>                  # 该 provider 有哪些模�
 | **A 子代理**（默认） | `subagent(provider=…, model=…, prompt=<填好的交接单>)` | 写手路由在白名单里 | 子代理**自己能读文件**，交接单可只给路径 |
 | **B 直连 API** | `scripts/write_episode.py`（主 agent 用 `bash` 发 HTTP） | **子代理路由被会话级白名单挡住**，或想完全不动会话模型 | 写手**没有文件访问**，模板／台账／分集规划必须**全部内联**进提示词 |
 | **C 退化** | 主 agent 自己写 | 上面两条都不可用 | 文笔由主模型决定；机检照常拦 |
+
+> **路线 B 的标准调用**（**必须带 `--validate --retry`**：同提示词多次生成存在**体量方差**，实测同一份交接单两次产出为 365 字 PASS / 507 字 E2 超标）：
+> ```bash
+> python3 "<SKILL>/scripts/write_episode.py" --prompt-file <交接单> --out <项目>/episodes/epNNN.md \
+>     --model <写手 model> --reasoning-effort high --validate --retry 2
+> ```
+> 端点与密钥都由使用者在本机配置（`~/.config/xiachen/writer_base_url` / `writer_key`，或环境变量 `WRITER_BASE_URL` / `WRITER_API_KEY`）——**脚本不内置任何端点**。
 
 > **为什么需要路线 B：** DSH 的子代理路由白名单（`subagent-model-selection.allowedModels`）**在会话创建时固化**，之后改配置**对已存在的会话无效** —— 所以「总控用 A 模型、正文用 B 模型」走子代理往往要开新会话才生效。路线 B 换一条路：**总控始终不换，主 agent 自己发 HTTP 调写手端点**，与「一次会话只能用一个模型」不冲突，**当次会话即可用**。用法见 `scripts/write_episode.py --help`。
 
