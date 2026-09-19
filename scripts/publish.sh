@@ -77,7 +77,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     die "仓库已跟踪的文件里出现 token/key 字面量，先清理再发布"
   fi
   # 凭据 / 设置文件绝不允许被跟踪（.gitignore 是提示，这里是闸门）
-  SUSPECT="$(git ls-files | grep -E '(^|/)(\.credentials.*|credentials\.(ya?ml|json)|settings\.ya?ml|config\.ya?ml|\.env.*)$' || true)"
+  SUSPECT="$(git ls-files | grep -E '(^|/)(\.credentials.*|credentials\.(ya?ml|json)|settings\.ya?ml|config\.ya?ml|\.env.*|writer_?key.*|\.writer-log.*)$' || true)"
   if [ -n "$SUSPECT" ]; then
     say "以下凭据/设置文件已被 git 跟踪："
     printf '%s\n' "$SUSPECT" | sed 's/^/  /'

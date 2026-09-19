@@ -29,7 +29,11 @@ episodes/
 
 # --- 凭据 / 设置文件（纵深防御：token、key、DSH 配置绝不应出现在仓库里）---
 gh_token
+writer_key
+writerkey
 *.token
+.writer-log.jsonl
+.writer-log*.jsonl
 .env
 .env.*
 # ⚠️ 修正记录（v1.5.1）：原写法 `credentials*` **不匹配以点开头的 basename**，

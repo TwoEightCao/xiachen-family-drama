@@ -89,6 +89,7 @@ SOFTWARE.
 | `templates/writer-handoff.md` | — | 原创（v1.5.0）。写手交接单：把单集正文外包给子代理时的完整提示词模板 + 账房验收流程 |
 | `scripts/validate_episode.py` | 思路参考 `short-drama-factory/scripts/validate_episode.py` | 原创实现。自行定义 E1~E11 检查项与档位识别机制 |
 | `scripts/check_chaining.py` | — | 原创（v1.4.0）。跨集承接机检 C1~C4 + 断章复活延迟诊断 |
+| `scripts/write_episode.py` | — | 原创（v1.6.0）。写手直连 API：主 agent 用 HTTP 调任意 OpenAI 兼容端点生成单集正文，密钥只在仓库外的 600 文件里，脚本发现密钥在仓库内即拒绝运行 |
 | `scripts/batch_preflight.py` | — | 原创。批次开工门控 P1~P9 + 上下文重建摘要（含叙事位置） |
 | `examples/ep01-demo.md` | — | 原创示例 |
 | `docs/使用教程.md` | — | 原创 |

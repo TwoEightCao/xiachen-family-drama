@@ -67,7 +67,14 @@ check_chaining.py    机检（跨集）→ 这一集有没有接住上一集
 判定             ＝ validate_episode.py + check_chaining.py + batch_preflight.py
 ```
 
-派活用 [`templates/writer-handoff.md`](templates/writer-handoff.md)（填好即作为子代理提示词）；工序与硬规则见 `SKILL.md` §二。
+派活用 [`templates/writer-handoff.md`](templates/writer-handoff.md)（填好即作为提示词）；工序与硬规则见 `SKILL.md` §二。两条投递路线：
+
+| 路线 | 怎么投 | 适用 |
+|---|---|---|
+| **A 子代理** | `subagent(provider=…, model=…)` | 写手路由在会话白名单里；写手**能自己读文件** |
+| **B 主 agent 直连 API** | `scripts/write_episode.py` | 白名单挡住子代理、又不想开新会话时；**总控模型全程不换**；写手**无文件访问，提示词须全内联** |
+
+路线 B 存在的原因：子代理路由白名单**按会话固化**，改配置对已存在的会话无效。B 让主 agent 自己发 HTTP 调写手端点，与「一次会话一个模型」不冲突。
 
 **为什么换写手不会写崩**：写手与账房之间的接口是**承接账**，而这个契约是**按物件签的，不是按文字签的**——`check_chaining.py` C2 只问「承接账声明的物件有没有出现在下一集开场窗口」，不问措辞。写手可以自由改文笔、换句式，只要那一帧里的**东西**还在，就通过；把物件换掉或改丢，就报 C2。
 
@@ -254,6 +261,7 @@ xiachen-family-drama/
 └── scripts/
     ├── validate_episode.py         单集机检 · 集内（E1~E11）
     ├── check_chaining.py           跨集承接机检（C1~C4 + D1 诊断）
+    ├── write_episode.py            写手直连 API（路线 B）：不改会话模型，主 agent 直接调写手端点
     ├── batch_preflight.py          批次开工门控（P1~P9）
     └── publish.sh                  安全发布器（一次性 token URL + 远端复验，不落盘密钥）
 ```

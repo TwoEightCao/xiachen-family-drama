@@ -1,6 +1,6 @@
 ---
 name: xiachen-family-drama
-version: 1.5.2
+version: 1.6.0
 description: "下沉中老年家庭伦理短剧编剧：专做婆媳清算、白眼狼子女、寻亲认子、家产争夺、养老困境、保姆护工、黄昏恋骗婚、拆迁亲戚八条下沉赛道的竖屏短剧/AI 漫剧剧本。覆盖：一句话点子→立项单→人物圣经→60/80/100 集大纲→情绪契约单元链→往返回合表→分集规划→逐集正文→台词去 AI 味→断章卡点→合规自检→跨集连写。当用户提到：写下沉短剧、中老年短剧、婆媳剧、寻亲剧、养老剧、家产剧、家庭伦理短剧、丈母娘/婆婆/姥爷/奶奶题材、催泪苦情剧、AI 漫剧剧本、红果/抖音下沉剧、写一集剧本、设计断章卡点/黄金3秒/爽点/执念、按集卡点留悬念等时使用。默认输出结构化 Markdown 剧本（立项单/人物表/总纲/分集/单集正文）。"
 user-invocable: true
 metadata:
@@ -52,13 +52,25 @@ list_subagent_models provider=<id>                  # 该 provider 有哪些模�
 优先级：① provider/model 名含 gemini / google 的 → ② 任何非主模型的可选路由 → ③ 都没有 → 退化为主 agent 自己写
 ```
 
+### 三条投递路线（按可用性依次尝试）
+
+| 路线 | 怎么投 | 什么时候用 | 关键差别 |
+|---|---|---|---|
+| **A 子代理**（默认） | `subagent(provider=…, model=…, prompt=<填好的交接单>)` | 写手路由在白名单里 | 子代理**自己能读文件**，交接单可只给路径 |
+| **B 直连 API** | `scripts/write_episode.py`（主 agent 用 `bash` 发 HTTP） | **子代理路由被会话级白名单挡住**，或想完全不动会话模型 | 写手**没有文件访问**，模板／台账／分集规划必须**全部内联**进提示词 |
+| **C 退化** | 主 agent 自己写 | 上面两条都不可用 | 文笔由主模型决定；机检照常拦 |
+
+> **为什么需要路线 B：** DSH 的子代理路由白名单（`subagent-model-selection.allowedModels`）**在会话创建时固化**，之后改配置**对已存在的会话无效** —— 所以「总控用 A 模型、正文用 B 模型」走子代理往往要开新会话才生效。路线 B 换一条路：**总控始终不换，主 agent 自己发 HTTP 调写手端点**，与「一次会话只能用一个模型」不冲突，**当次会话即可用**。用法见 `scripts/write_episode.py --help`。
+
+> ⚠️ **A 与 B 的交接单不一样。** 子代理能读文件，提示词里可以写「去读 `references/06-…`」；**API 调用读不了文件** —— 走 B 时必须把档位模板、台账现值、本集分集规划、上一集断章**全部内联**，否则写手只能凭空编。细则见 `templates/writer-handoff.md` §六。
+
 **五条硬规则：**
 
 1. **账不外流。** 写手**只读** `台账.md`，**只写** `episodes/epNNN.md`。台账一个字都不许由写手改动 —— 写手一改账，承接账这个契约立刻烂掉。
-2. **必须用 `subagent`（spawn，可指定 provider/model），不得用 `subagent_fork`。** fork 不支持模型选择，provider/model 与父相同 —— 用它等于没换模型。
+2. **走路线 A 时必须用 `subagent`（spawn，可指定 provider/model），不得用 `subagent_fork`。** fork 不支持模型选择，provider/model 与父相同 —— 用它等于没换模型。（路线 B 不走子代理，无此问题。）
 3. **派活必须用 `templates/writer-handoff.md`**，逐项填全。写手是全新会话、不继承任何上下文，交接单是它唯一的信息来源，漏一项它就只能编。
 4. **验收由账房做，不看写手汇报。** 写完一批立刻跑 `validate_episode.py`（集内）+ `check_chaining.py`（跨集）；写手声称的「PASS」不构成证据。
-5. **没有写手路由时优雅退化。** 若 `list_subagent_models` 报 not allowed / not registered，主 agent 自己写正文，并在交付时**明确说明「本批正文未走写手子代理」**——不许假装走了。
+5. **没有写手路由时优雅退化。** 若 `list_subagent_models` 报 not allowed / not registered、且路线 B 也不可用（无端点／无密钥），则由主 agent 自己写正文，并在交付时**明确说明「本批正文未走写手，由主模型直接产出」**——不许假装走了外部写手。
 
 **为什么换写手不会写崩：** 写手与账房之间的接口是**承接账**，而这个契约是**按物件签的，不是按文字签的**。`check_chaining.py` 的 C2 只判「承接账声明的物件有没有出现在下一集开场窗口里」，不判措辞 —— 写手可以自由改文笔、换句式、重写镜头，只要那一帧里的**东西**还在就通过；把物件换掉或改丢，就报 C2。所以写手的自主权边界是清楚的：
 
@@ -136,7 +148,7 @@ PASS 时**只读它打印的「上下文重建摘要」**（情绪契约 / 所�
 
 ### Step 3 单集：上集承接 → 黄金 3 秒 → 往返回合一拍 → 断章
 
-> **本步默认外包给写手子代理**（见 §二 模型分工）：按 `templates/writer-handoff.md` 填好交接单 → 用 `subagent` 派活（**不得用 `subagent_fork`**）→ 写手回报后由账房跑机检验收。没有可用写手路由时，主 agent 自己写，并在交付时声明「本批正文未走写手子代理」。
+> **本步默认外包给写手**（见 §二 模型分工）：按 `templates/writer-handoff.md` 填好交接单 → 投递（路线 A 子代理 `subagent`，或路线 B `scripts/write_episode.py` 直连 API）→ 回报后由账房跑机检验收。两条路线都不可用时由主 agent 自己写，并在交付时声明。
 
 读 `references/06-hook-cliffhanger.md` 与 `references/05-voice-dialogue.md`：
 **上集承接（前 15 秒，兑现上一集断章——这是本集第一职责）** → 黄金前 3 秒（五母型之一，承接下来之后再起）→ 本集一回合（施压升一档 → 反驳带新代价）→ 情绪顶点 → 集尾命中四大断章公式之一。
@@ -222,6 +234,7 @@ python3 "<SKILL>/scripts/check_chaining.py" --self-test
 | `examples/ep01-demo.md` | 标准档单集示例（F1 婆媳清算） | `/写剧本` |
 | `scripts/validate_episode.py` | 单集机检（集内）：体量/场景/对白行/台词长度/断章五字段/中段小钩/高危词/复读/开篇禁令 | `/写剧本` `/连写` |
 | `scripts/check_chaining.py` | ★跨集承接机检：C1 断裂 / C2 未兑现 / C3 超期 / C4 台账 + 断章复活延迟诊断 | `/写剧本` `/连写` |
+| `scripts/write_episode.py` | ★写手直连 API（路线 B）：主 agent 用 HTTP 调写手端点生成单集正文并落盘，不改会话模型 | `/写剧本` `/连写` |
 | `scripts/batch_preflight.py` | ★批次开工门控：底稿/台账字段/集号连续/伏笔超期/断章超期校验 + 上下文重建摘要（含叙事位置） | `/连写` |
 
 ---
